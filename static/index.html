@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>UPSIDA Chatbot</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background-color: #f4f4f4;
+      max-width: 700px;
+      margin: auto;
+      padding: 40px 20px;
+    }
+
+    h2 {
+      text-align: center;
+      color: #333;
+    }
+
+    #chat-container {
+      background: white;
+      padding: 20px;
+      border-radius: 10px;
+      height: 400px;
+      overflow-y: auto;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+      margin-bottom: 20px;
+    }
+
+    .message {
+      padding: 10px 15px;
+      margin: 10px 0;
+      border-radius: 12px;
+      max-width: 75%;
+      clear: both;
+      white-space: pre-line;
+    }
+
+    .user {
+      background-color: #0074D9;
+      color: white;
+      float: right;
+      text-align: right;
+    }
+
+    .bot {
+      background-color: #e0e0e0;
+      color: #333;
+      float: left;
+      text-align: left;
+    }
+
+    #inputText {
+      width: 100%;
+      height: 80px;
+      padding: 10px;
+      font-size: 16px;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+      resize: vertical;
+    }
+
+    #sendBtn {
+      margin-top: 10px;
+      background-color: #0074D9;
+      color: white;
+      padding: 10px 20px;
+      font-size: 16px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+
+    #sendBtn:hover {
+      background-color: #005fa3;
+    }
+  </style>
+</head>
+<body>
+
+  <h2>🤖 UPSIDA Complaint Chatbot</h2>
+
+  <div id="chat-container"></div>
+
+  <textarea id="inputText" placeholder="Type your complaint..."></textarea><br>
+  <button id="sendBtn" onclick="sendText()">Send</button>
+
+  <script>
+    function appendMessage(text, sender) {
+      const container = document.getElementById("chat-container");
+      const msgDiv = document.createElement("div");
+      msgDiv.classList.add("message", sender);
+      msgDiv.innerText = text;
+      container.appendChild(msgDiv);
+      container.scrollTop = container.scrollHeight;
+    }
+
+    async function sendText() {
+      const inputField = document.getElementById("inputText");
+      const userInput = inputField.value.trim();
+
+      if (!userInput) return;
+
+      appendMessage(userInput, "user");
+
+      const res = await fetch("http://127.0.0.1:5000/predict", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: userInput })
+      });
+
+      inputField.value = "";
+
+      if (res.ok) {
+        const contentType = res.headers.get("content-type");
+
+        if (contentType && contentType.includes("application/json")) {
+          const data = await res.json();
+          const botReply = `Intent: ${data.predicted_intent}\nLanguage: ${data.language_detected}\nConfidence: ${data.confidence_score}`;
+          appendMessage(botReply, "bot");
+        } else {
+          const plainText = await res.text();
+          appendMessage(plainText, "bot");
+        }
+      } else {
+        appendMessage("❌ Something went wrong.", "bot");
+      }
+    }
+  </script>
+
+</body>
+</html>
