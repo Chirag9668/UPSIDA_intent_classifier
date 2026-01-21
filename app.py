@@ -22,7 +22,7 @@ def load_model():
         model = AutoModelForSequenceClassification.from_pretrained("muril_model")
         model.eval()
         id2label = model.config.id2label
-        print("Model loaded successfully")
+        print("Model loaded")
 
 # -----------------------------
 # Utilities
@@ -36,11 +36,11 @@ def detect_language(text):
     devanagari = sum('\u0900' <= ch <= '\u097F' for ch in text)
     latin = sum('a' <= ch.lower() <= 'z' for ch in text)
 
-    if devanagari > 0 and latin > 0:
+    if devanagari and latin:
         return "Hinglish"
-    elif devanagari > 0:
+    elif devanagari:
         return "Hindi"
-    elif latin > 0:
+    elif latin:
         return "English"
     return "Unknown"
 
@@ -48,12 +48,7 @@ def predict_intent(text):
     load_model()
 
     cleaned = clean_text(text)
-    inputs = tokenizer(
-        cleaned,
-        return_tensors="pt",
-        truncation=True,
-        padding=True
-    )
+    inputs = tokenizer(cleaned, return_tensors="pt", truncation=True, padding=True)
 
     with torch.no_grad():
         outputs = model(**inputs)
@@ -69,7 +64,7 @@ def predict_intent(text):
 # -----------------------------
 # Routes
 # -----------------------------
-@app.route("/ping", methods=["GET"])
+@app.route("/ping")
 def ping():
     return jsonify({"status": "API running"})
 
@@ -95,7 +90,7 @@ def predict():
             "predicted_intent": "error",
             "language_detected": "error",
             "confidence_score": 0.0
-        })
+        }), 500
 
 @app.route("/")
 def serve_html():
