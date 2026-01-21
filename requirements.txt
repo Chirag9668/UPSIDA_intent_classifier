@@ -1,7 +1,6 @@
 flask
+flask-cors
+gunicorn
 torch
 transformers
-flask-cors
-fastapi
-gunicorn
 scikit-learn
