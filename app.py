@@ -1,17 +1,32 @@
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify, send_from_directory, make_response
 from flask_cors import CORS
 import torch
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 import re
+import os
 
+# ----------------------------
+# Flask setup
+# ----------------------------
 app = Flask(__name__, static_folder="static")
 CORS(app)
 
-# -----------------------------
-# Global (lazy loaded)
-# -----------------------------
-tokenizer = None
-model = None
+# ----------------------------
+# Load YOUR trained MuRIL model
+# ----------------------------
+MODEL_PATH = "model"   # <-- local folder, NOT GitHub
+
+if not os.path.exists(MODEL_PATH):
+    raise RuntimeError(
+        "❌ model/ folder not found. "
+        "Please unzip your trained MuRIL model inside the project."
+    )
+
+tokenizer = AutoTokenizer.from_pretrained(MODEL_PATH)
+model = AutoModelForSequenceClassification.from_pretrained(MODEL_PATH)
+model.eval()
+
+# Label mapping (same as training)
 id2label = {
     0: "Infrastructure_Road_Condition",
     1: "Waste_Management_Concern",
@@ -20,26 +35,9 @@ id2label = {
     4: "Infrastructure_Power_Outage"
 }
 
-MODEL_NAME = "google/muril-base-cased"
-
-# -----------------------------
-# Load model lazily (IMPORTANT)
-# -----------------------------
-def load_model():
-    global tokenizer, model
-    if model is None:
-        print("⬇️ Loading MuRIL model from HuggingFace...")
-        tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
-        model = AutoModelForSequenceClassification.from_pretrained(
-            MODEL_NAME,
-            num_labels=5
-        )
-        model.eval()
-        print("✅ Model loaded successfully")
-
-# -----------------------------
-# Utilities
-# -----------------------------
+# ----------------------------
+# Text utilities
+# ----------------------------
 def clean_text(text):
     text = text.lower()
     text = re.sub(r'[^a-zA-Z0-9\u0900-\u097F\s]', '', text)
@@ -57,10 +55,12 @@ def detect_language(text):
         return "English"
     return "Unknown"
 
+# ----------------------------
+# Inference
+# ----------------------------
 def predict_intent(text):
-    load_model()
-
     cleaned = clean_text(text)
+
     inputs = tokenizer(
         cleaned,
         return_tensors="pt",
@@ -70,46 +70,45 @@ def predict_intent(text):
 
     with torch.no_grad():
         outputs = model(**inputs)
-        probs = torch.nn.functional.softmax(outputs.logits, dim=1)
+        probs = torch.softmax(outputs.logits, dim=1)
         confidence, pred = torch.max(probs, dim=1)
 
     return {
+        "text_input": text,
         "predicted_intent": id2label[pred.item()],
-        "language_detected": detect_language(text),
-        "confidence_score": round(confidence.item(), 4)
+        "confidence_score": round(confidence.item(), 4),
+        "language_detected": detect_language(text)
     }
 
-# -----------------------------
+# ----------------------------
 # Routes
-# -----------------------------
-@app.route("/ping")
-def ping():
-    return jsonify({"status": "API running"})
-
+# ----------------------------
 @app.route("/predict", methods=["POST"])
 def predict():
-    try:
-        data = request.get_json(force=True)
-        text = data.get("text", "").strip()
+    data = request.get_json()
+    text = data.get("text", "").strip()
 
-        if not text:
-            return jsonify({
-                "predicted_intent": "unknown",
-                "language_detected": "unknown",
-                "confidence_score": 0.0
-            })
+    invalid_inputs = [
+        "hi", "hello", "how are you", "who are you",
+        "what is your name", "thanks", "thank you",
+        "ok", "bye", "help", "?", "!"
+    ]
 
-        result = predict_intent(text)
-        return jsonify(result)
+    if not text or text.lower() in invalid_inputs or len(text.split()) < 3:
+        return make_response(
+            "Sorry, I can't understand your problem. Please type your complaint.",
+            200
+        )
 
-    except Exception as e:
-        print("ERROR:", e)
-        return jsonify({
-            "predicted_intent": "error",
-            "language_detected": "error",
-            "confidence_score": 0.0
-        }), 500
+    result = predict_intent(text)
+    return jsonify(result)
 
 @app.route("/")
 def serve_html():
     return send_from_directory("static", "index.html")
+
+# ----------------------------
+# LOCAL RUN ONLY
+# ----------------------------
+if __name__ == "__main__":
+    app.run(host="127.0.0.1", port=5000, debug=True)

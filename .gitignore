@@ -1,7 +1,6 @@
+model/
 venv/
-.env/
 __pycache__/
-*.pyc
-*.pyd
-*.dll
-muril_model/
+*.bin
+*.safetensors
+hf_cache/
